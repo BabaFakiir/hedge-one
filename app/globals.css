@@ -75,7 +75,7 @@
 }
 
 @theme inline {
-  --font-sans: "Geist", "Geist Fallback";
+  --font-sans: "Inter", "Inter Fallback";
   --font-mono: "Geist Mono", "Geist Mono Fallback";
 
   --color-primary: #10b981;

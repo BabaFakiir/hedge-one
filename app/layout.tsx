@@ -1,9 +1,11 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { GeistSans } from "geist/font/sans"
+import { Inter } from "next/font/google"
 import { GeistMono } from "geist/font/mono"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
+
+const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "Hedge-One - Algorithmic Trading for NIFTY50",
@@ -18,7 +20,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`font-sans antialiased ${GeistSans.variable} ${GeistMono.variable} bg-slate-950 text-slate-50`}>
+      <body className={`font-sans antialiased ${inter.variable} ${GeistMono.variable} bg-slate-950 text-slate-50`}>
         {children}
         <Analytics />
       </body>
