@@ -1,9 +1,11 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { useState } from "react"
 import { Menu, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
@@ -22,9 +24,13 @@ export default function Navbar() {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">H1</span>
-            </div>
+            <Image
+              src="/navbar_app_logo.png"  // Path relative to the public/ folder
+              alt="Hedge-One Logo"
+              width={32}
+              height={32}
+              className="rounded-md"
+            />
             <span className="text-xl font-bold text-emerald-400">Hedge-One</span>
           </Link>
 
