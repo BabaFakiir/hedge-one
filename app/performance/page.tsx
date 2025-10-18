@@ -1,3 +1,5 @@
+"use client"
+
 import Navbar from "@/components/site/navbar"
 import Footer from "@/components/site/footer"
 import { Card } from "@/components/ui/card"
