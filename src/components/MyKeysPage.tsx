@@ -18,6 +18,7 @@ interface MyKeyRow {
   client_id: Nullable<string>;
   mpin: Nullable<string>;
   totp: Nullable<string>;
+  qty: Nullable<number>;
   user: string;
 }
 
@@ -74,6 +75,7 @@ export function MyKeysPage() {
         client_id: r.client_id ?? null,
         mpin: r.mpin ?? null,
         totp: r.totp ?? null,
+        qty: r.qty ?? null,
         user: r.user ?? user.id,
         _originalApiKey: r.api_key ?? '',
         _isNew: false,
@@ -102,6 +104,7 @@ export function MyKeysPage() {
         client_id: null,
         mpin: null,
         totp: null,
+        qty: null,
         user: user.id,
         _originalApiKey: '',
         _isNew: true,
@@ -142,6 +145,7 @@ export function MyKeysPage() {
         client_id: row.client_id,
         mpin: row.mpin,
         totp: row.totp,
+        qty: row.qty,
         user: row.user,
       };
 
@@ -227,13 +231,14 @@ export function MyKeysPage() {
                   <th className="p-2">Client ID</th>
                   <th className="p-2">MPIN</th>
                   <th className="p-2">TOTP</th>
+                  <th className="p-2">Qty</th>
                   <th className="p-2 w-28">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td className="p-2 text-slate-500" colSpan={8}>
+                    <td className="p-2 text-slate-500" colSpan={9}>
                       No entries yet. Click "Add Entry" to create one.
                     </td>
                   </tr>
@@ -291,6 +296,20 @@ export function MyKeysPage() {
                           value={r.totp ?? ''}
                           onChange={(e) => updateCell(idx, 'totp', e.target.value || null)}
                           placeholder="TOTP"
+                        />
+                      </td>
+                      <td className="p-2 min-w-[100px]">
+                        <Input
+                          type="number"
+                          value={r.qty !== null && r.qty !== undefined ? String(r.qty) : ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            const parsed = value === '' ? null : Number(value);
+                            if (parsed === null || Number.isFinite(parsed)) {
+                              updateCell(idx, 'qty', parsed);
+                            }
+                          }}
+                          placeholder="Qty"
                         />
                       </td>
                       <td className="p-2">
