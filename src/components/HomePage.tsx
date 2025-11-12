@@ -1,7 +1,62 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { TrendingUp, Activity, BarChart3, DollarSign } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Button } from './ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { useAuth } from './AuthContext';
+import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { toast } from 'sonner';
+
+interface Trade {
+  id: number;
+  user: string | null;
+  stock_option: string | null;
+  position: string | null;
+  price: number | null;
+  date_time: string | null;
+}
 
 export function HomePage() {
+  const { user, accessToken } = useAuth();
+  const [trades, setTrades] = useState<Trade[]>([]);
+  const [isLoadingTrades, setIsLoadingTrades] = useState(false);
+
+  const supabase = useMemo(() => {
+    return createClient(
+      `https://${projectId}.supabase.co`,
+      publicAnonKey,
+      {
+        global: accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : undefined,
+      }
+    );
+  }, [accessToken]);
+
+  const fetchTrades = useCallback(async () => {
+    if (!user?.id) return;
+    setIsLoadingTrades(true);
+    try {
+      const { data, error } = await supabase
+        .from('trades')
+        .select('*')
+        .eq('user', user.id)
+        .order('date_time', { ascending: false });
+
+      if (error) throw error;
+
+      setTrades((data ?? []) as Trade[]);
+    } catch (error) {
+      console.error('Error fetching trades:', error);
+      toast.error('Failed to load trades');
+    } finally {
+      setIsLoadingTrades(false);
+    }
+  }, [supabase, user?.id]);
+
+  useEffect(() => {
+    fetchTrades();
+  }, [fetchTrades]);
+
   const stats = [
     {
       title: 'Total Balance',
@@ -117,6 +172,54 @@ export function HomePage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="flex items-center justify-between">
+          <div>
+            <CardTitle>Recent Trades</CardTitle>
+            <CardDescription>Latest executions pulled from your trade history</CardDescription>
+          </div>
+          <Button onClick={fetchTrades} disabled={isLoadingTrades} variant="secondary">
+            {isLoadingTrades ? 'Refreshing...' : 'Refresh'}
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {isLoadingTrades ? (
+            <div className="text-slate-600">Loading trades...</div>
+          ) : trades.length === 0 ? (
+            <div className="text-slate-500 text-sm">No trades recorded yet.</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Stock / Option</TableHead>
+                  <TableHead>Position</TableHead>
+                  <TableHead>Price</TableHead>
+                  <TableHead>Date / Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {trades.map((trade) => (
+                  <TableRow key={trade.id}>
+                    <TableCell>{trade.stock_option ?? '—'}</TableCell>
+                    <TableCell className="capitalize">{trade.position ?? '—'}</TableCell>
+                    <TableCell>
+                      {trade.price !== null && trade.price !== undefined
+                        ? `$${trade.price.toFixed(2)}`
+                        : '—'}
+                    </TableCell>
+                    <TableCell>
+                      {trade.date_time
+                        ? new Date(trade.date_time).toLocaleString()
+                        : '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
