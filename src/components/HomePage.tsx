@@ -120,58 +120,7 @@ export function HomePage() {
         })}
       </div>
 
-      {/* Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Latest updates on your trades</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[
-                { action: 'Trade executed on BTC/USD', time: '2 hours ago', status: 'success' },
-                { action: 'API keys updated successfully', time: '5 hours ago', status: 'info' },
-                { action: 'Market alert triggered', time: '1 day ago', status: 'warning' },
-              ].map((activity, index) => (
-                <div key={index} className="flex items-start gap-3 pb-3 border-b border-slate-100 last:border-0 last:pb-0">
-                  <div className={`w-2 h-2 rounded-full mt-2 ${
-                    activity.status === 'success' ? 'bg-green-500' :
-                    activity.status === 'warning' ? 'bg-amber-500' : 'bg-blue-500'
-                  }`} />
-                  <div className="flex-1">
-                    <p className="text-slate-900">{activity.action}</p>
-                    <p className="text-slate-500">{activity.time}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Stats</CardTitle>
-            <CardDescription>Performance metrics at a glance</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-                <span className="text-slate-600">Win Rate</span>
-                <span className="text-slate-900">68.5%</span>
-              </div>
-              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-                <span className="text-slate-600">Average Trade Duration</span>
-                <span className="text-slate-900">3.2 days</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-600">Risk-Reward Ratio</span>
-                <span className="text-slate-900">1:2.4</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      
 
       <Card>
         <CardHeader className="flex items-center justify-between">
