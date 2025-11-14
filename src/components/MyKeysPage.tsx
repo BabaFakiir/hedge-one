@@ -34,6 +34,7 @@ export function MyKeysPage() {
   const [rows, setRows] = useState<EditableRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
 
   const supabase = useMemo(() => {
     // Create a client that forwards the current user's JWT for RLS
@@ -186,6 +187,35 @@ export function MyKeysPage() {
     }
   };
 
+  const handleRestart = async () => {
+    setIsRestarting(true);
+    try {
+      const env = (import.meta as any).env;
+      // const restartKey = env?.NEXT_PUBLIC_RESTART_KEY || env?.VITE_RESTART_KEY;
+      
+      // if (!restartKey) {
+      //   toast.error('Restart API key not configured');
+      //   return;
+      // }
+
+      const response = await fetch("https://be4ny3g67l.execute-api.us-east-1.amazonaws.com/Restart/restartservice", {
+        method: "POST",
+        headers: {}
+      });
+
+      if (!response.ok) {
+        throw new Error(`Restart failed: ${response.statusText}`);
+      }
+
+      toast.success('EC2 instance restart initiated');
+    } catch (error: any) {
+      console.error('Restart failed:', error);
+      toast.error(error?.message || 'Failed to restart EC2 instance');
+    } finally {
+      setIsRestarting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -205,6 +235,9 @@ export function MyKeysPage() {
           <Button onClick={addNewRow} variant="default">Add Entry</Button>
           <Button onClick={fetchRows} variant="secondary" disabled={isFetching}>
             {isFetching ? 'Refreshing...' : 'Refresh'}
+          </Button>
+          <Button onClick={handleRestart} variant="outline" disabled={isRestarting}>
+            {isRestarting ? 'Restarting...' : 'Restart'}
           </Button>
         </div>
       </div>
