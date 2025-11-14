@@ -89,36 +89,111 @@ export function HomePage() {
     fetchLogs();
   }, [fetchTrades, fetchLogs]);
 
+  // Calculate Performance and Win Rate from trades
+  const { performance, winRate } = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    // Filter trades for current month
+    const currentMonthTrades = trades.filter((trade) => {
+      if (!trade.date_time) return false;
+      const tradeDate = new Date(trade.date_time);
+      return tradeDate.getMonth() === currentMonth && tradeDate.getFullYear() === currentYear;
+    });
+
+    if (currentMonthTrades.length === 0) {
+      return { performance: { pnl: 0, returnPercent: 0 }, winRate: 0 };
+    }
+
+    // Group trades by stock_option and match Entry/Buy with Exit/Sell/CUTOFF
+    const tradePairs: Array<{ buy: Trade; sell: Trade | null }> = [];
+    const stockGroups = new Map<string, Trade[]>();
+
+    // Group trades by stock_option
+    currentMonthTrades.forEach((trade) => {
+      if (!trade.stock_option) return;
+      const key = trade.stock_option;
+      if (!stockGroups.has(key)) {
+        stockGroups.set(key, []);
+      }
+      stockGroups.get(key)!.push(trade);
+    });
+
+    // Match Buy/Entry with Sell/Exit/CUTOFF for each stock
+    stockGroups.forEach((stockTrades) => {
+      // Sort by date_time
+      stockTrades.sort((a, b) => {
+        if (!a.date_time || !b.date_time) return 0;
+        return new Date(a.date_time).getTime() - new Date(b.date_time).getTime();
+      });
+
+      let buyTrade: Trade | null = null;
+      stockTrades.forEach((trade) => {
+        const position = (trade.position || '').toLowerCase();
+        const isEntry = position === 'entry' || position === 'buy';
+        const isExit = position === 'exit' || position === 'sell' || position === 'cutoff';
+
+        if (isEntry && !buyTrade) {
+          buyTrade = trade;
+        } else if (isExit && buyTrade) {
+          tradePairs.push({ buy: buyTrade, sell: trade });
+          buyTrade = null;
+        }
+      });
+    });
+
+    // Calculate total PnL and return percentage
+    let totalPnL = 0;
+    let totalBuyValue = 0;
+    let winningTrades = 0;
+    let totalTrades = 0;
+
+    tradePairs.forEach(({ buy, sell }) => {
+      if (!buy.price || !sell?.price) return;
+
+      const buyPrice = buy.price;
+      const sellPrice = sell.price;
+      const pnl = sellPrice - buyPrice;
+      const buyValue = buyPrice;
+
+      totalPnL += pnl;
+      totalBuyValue += buyValue;
+      totalTrades++;
+
+      if (pnl > 0) {
+        winningTrades++;
+      }
+    });
+
+    const returnPercent = totalBuyValue > 0 ? (totalPnL / totalBuyValue) * 100 : 0;
+    const winRatePercent = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
+
+    return {
+      performance: {
+        pnl: totalPnL,
+        returnPercent,
+      },
+      winRate: winRatePercent,
+    };
+  }, [trades]);
+
   const stats = [
     {
-      title: 'Total Balance',
-      value: '$48,294',
-      icon: DollarSign,
-      description: '+12.3% this month',
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50',
-    },
-    {
-      title: 'Active Trades',
-      value: '8',
-      icon: Activity,
-      description: '3 pending review',
-      color: 'text-green-600',
-      bgColor: 'bg-green-50',
-    },
-    {
       title: 'Performance',
-      value: '+15.2%',
+      value: performance.returnPercent >= 0 
+        ? `+${performance.returnPercent.toFixed(2)}%` 
+        : `${performance.returnPercent.toFixed(2)}%`,
       icon: BarChart3,
-      description: 'Average return',
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-50',
+      description: `PnL: ${performance.pnl >= 0 ? '+' : ''}$${performance.pnl.toFixed(2)}`,
+      color: performance.returnPercent >= 0 ? 'text-green-600' : 'text-red-600',
+      bgColor: performance.returnPercent >= 0 ? 'bg-green-50' : 'bg-red-50',
     },
     {
       title: 'Win Rate',
-      value: '68.5%',
+      value: `${winRate.toFixed(1)}%`,
       icon: TrendingUp,
-      description: 'Last 30 days',
+      description: 'This month',
       color: 'text-amber-600',
       bgColor: 'bg-amber-50',
     },
