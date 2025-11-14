@@ -233,9 +233,6 @@ export function MyKeysPage() {
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={addNewRow} variant="default">Add Entry</Button>
-          <Button onClick={fetchRows} variant="secondary" disabled={isFetching}>
-            {isFetching ? 'Refreshing...' : 'Refresh'}
-          </Button>
           <Button onClick={handleRestart} variant="outline" disabled={isRestarting}>
             {isRestarting ? 'Restarting...' : 'Restart'}
           </Button>
@@ -346,14 +343,23 @@ export function MyKeysPage() {
                         />
                       </td>
                       <td className="p-2">
-                        <Button
-                          size="sm"
-                          disabled={r._isSaving || !r._isDirty}
-                          onClick={() => saveRow(idx)}
-                          className="w-full"
-                        >
-                          {r._isSaving ? 'Saving...' : 'Save'}
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            disabled={r._isSaving || !r._isDirty}
+                            onClick={() => saveRow(idx)}
+                          >
+                            {r._isSaving ? 'Saving...' : 'Save'}
+                          </Button>
+                          <Button 
+                            size="sm"
+                            onClick={handleRestart} 
+                            variant="outline" 
+                            disabled={isRestarting}
+                          >
+                            {isRestarting ? 'Restarting...' : 'Restart'}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))
