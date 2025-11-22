@@ -4,11 +4,13 @@ import { LandingPage } from './components/LandingPage';
 import { DashboardLayout } from './components/DashboardLayout';
 import { HomePage } from './components/HomePage';
 import { MyKeysPage } from './components/MyKeysPage';
+import { TelegramPage } from './components/TelegramPage';
+import { StrategiesPage } from './components/StrategiesPage';
 import { Toaster } from './components/ui/sonner';
 
 function AppContent() {
   const { isAuthenticated, isLoading } = useAuth();
-  const [currentPage, setCurrentPage] = useState<'home' | 'mykeys'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'mykeys' | 'telegram' | 'strategies'>('home');
 
   if (isLoading) {
     return (
@@ -22,9 +24,24 @@ function AppContent() {
     return <LandingPage />;
   }
 
+  const renderPage = () => {
+    switch (currentPage) {
+      case 'home':
+        return <HomePage />;
+      case 'mykeys':
+        return <MyKeysPage />;
+      case 'telegram':
+        return <TelegramPage />;
+      case 'strategies':
+        return <StrategiesPage />;
+      default:
+        return <HomePage />;
+    }
+  };
+
   return (
     <DashboardLayout currentPage={currentPage} onNavigate={setCurrentPage}>
-      {currentPage === 'home' ? <HomePage /> : <MyKeysPage />}
+      {renderPage()}
     </DashboardLayout>
   );
 }

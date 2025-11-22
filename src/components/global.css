@@ -1,0 +1,80 @@
+.DialogOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 9999;
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+  
+.DialogContent {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    z-index: 10000;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 672px;
+    animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -48%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+}
+
+.DialogTitle {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: rgb(15, 23, 42);
+    margin: 0;
+}
+
+.DialogDescription {
+    font-size: 0.875rem;
+    color: rgb(71, 85, 105);
+    margin: 0;
+}
+
+.IconButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.IconButton:hover {
+    background-color: rgb(241, 245, 249);
+}
+
+.IconButton:focus {
+    outline: 2px solid rgb(59, 130, 246);
+    outline-offset: 2px;
+}
+  

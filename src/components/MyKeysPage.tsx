@@ -2,15 +2,21 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { Textarea } from './ui/textarea';
 import { useAuth } from './AuthContext';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { toast } from 'sonner';
-import { Key } from 'lucide-react';
+import { Key, Edit3, Trash2, Plus, X } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
+import * as Dialog from "@radix-ui/react-dialog";
+import './global.css';
 
 type Nullable<T> = T | null;
 
-interface MyKeyRow {
+interface BrokerRow {
+  id: string;
+  user_id: string;
+  name: string;
   platform: string;
   api_key: string;
   api_secret: Nullable<string>;
@@ -18,26 +24,28 @@ interface MyKeyRow {
   client_id: Nullable<string>;
   mpin: Nullable<string>;
   totp: Nullable<string>;
-  qty: Nullable<number>;
-  user: string;
+  notes: Nullable<string>;
+  created_at?: string;
+  updated_at?: string;
 }
 
-interface EditableRow extends MyKeyRow {
-  _originalApiKey: string;
-  _isNew?: boolean;
-  _isSaving?: boolean;
-  _isDirty?: boolean;
-}
+interface BrokerForm extends Omit<BrokerRow, 'id' | 'user_id' | 'created_at' | 'updated_at'> {}
 
 export function MyKeysPage() {
   const { accessToken, user } = useAuth();
-  const [rows, setRows] = useState<EditableRow[]>([]);
+  const [brokers, setBrokers] = useState<BrokerRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
 
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null); // null => adding new
+  const [form, setForm] = useState<BrokerForm | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+
   const supabase = useMemo(() => {
-    // Create a client that forwards the current user's JWT for RLS
     return createClient(
       `https://${projectId}.supabase.co`,
       publicAnonKey,
@@ -49,155 +57,155 @@ export function MyKeysPage() {
 
   useEffect(() => {
     if (!user?.id) {
-        setIsLoading(false);
-        return;
-      }
-    fetchRows();
+      setIsLoading(false);
+      return;
+    }
+    fetchBrokers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, supabase]);
 
-  const fetchRows = async () => {
+  const fetchBrokers = async () => {
     if (!user?.id) return;
     setIsFetching(true);
     try {
       const { data, error } = await supabase
-        .from('my_keys')
+        .from('user_brokers')
         .select('*')
-        .eq('user', user.id)
-        .order('platform', { ascending: true });
+        .eq('user_id', user.id)
+        .order('name', { ascending: true });
 
       if (error) throw error;
 
-      const editable = (data || []).map((r) => ({
-        platform: r.platform ?? '',
-        api_key: r.api_key ?? '',
-        api_secret: r.api_secret ?? null,
-        auth_token: r.auth_token ?? null,
-        client_id: r.client_id ?? null,
-        mpin: r.mpin ?? null,
-        totp: r.totp ?? null,
-        qty: r.qty ?? null,
-        user: r.user ?? user.id,
-        _originalApiKey: r.api_key ?? '',
-        _isNew: false,
-        _isSaving: false,
-        _isDirty: false,
-      })) as EditableRow[];
-
-      setRows(editable);
+      setBrokers((data || []) as BrokerRow[]);
     } catch (error) {
-      console.error('Error fetching keys:', error);
-      toast.error('Failed to load keys');
+      console.error('Error fetching brokers:', error);
+      toast.error('Failed to load brokers');
     } finally {
       setIsLoading(false);
       setIsFetching(false);
     }
   };
 
-  const addNewRow = () => {
-    if (!user?.id) return;
-    setRows((prev) => [
-      {
-        platform: '',
-        api_key: '',
-        api_secret: null,
-        auth_token: null,
-        client_id: null,
-        mpin: null,
-        totp: null,
-        qty: null,
-        user: user.id,
-        _originalApiKey: '',
-        _isNew: true,
-        _isSaving: false,
-        _isDirty: true,
-      },
-      ...prev,
-    ]);
+  // Open dialog to add new broker
+  const openAddDialog = () => {
+    if (!user?.id) {
+      toast.error('No user detected');
+      return;
+    }
+    setEditingId(null);
+    setForm({
+      name: '',
+      platform: '',
+      api_key: '',
+      api_secret: null,
+      auth_token: null,
+      client_id: null,
+      mpin: null,
+      totp: null,
+      notes: null,
+    });
+    setDialogOpen(true);
   };
 
-  const updateCell = <K extends keyof MyKeyRow>(index: number, field: K, value: MyKeyRow[K]) => {
-    setRows((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], [field]: value, _isDirty: true };
-      return next;
+  // Open dialog to edit existing broker
+  const openEditDialog = (broker: BrokerRow) => {
+    setEditingId(broker.id);
+    setForm({
+      name: broker.name,
+      platform: broker.platform,
+      api_key: broker.api_key,
+      api_secret: broker.api_secret,
+      auth_token: broker.auth_token,
+      client_id: broker.client_id,
+      mpin: broker.mpin,
+      totp: broker.totp,
+      notes: broker.notes,
+    });
+    setDialogOpen(true);
+  };
+
+  const updateForm = <K extends keyof BrokerForm>(field: K, value: BrokerForm[K]) => {
+    setForm((prev) => {
+      if (!prev) return prev;
+      return { ...prev, [field]: value };
     });
   };
 
-  const saveRow = async (index: number) => {
-    const row = rows[index];
-    if (!row) return;
-    if (!row.platform || !row.api_key) {
-      toast.error('Platform and API Key are required');
+  const saveBroker = async () => {
+    if (!form || !user?.id) return;
+    if (!form.name || !form.platform || !form.api_key) {
+      toast.error('Name, Platform, and API Key are required');
       return;
     }
+    setIsSaving(true);
     try {
-      setRows((prev) => {
-        const next = [...prev];
-        next[index] = { ...next[index], _isSaving: true };
-        return next;
-      });
-
-      const payload: MyKeyRow = {
-        platform: row.platform,
-        api_key: row.api_key,
-        api_secret: row.api_secret,
-        auth_token: row.auth_token,
-        client_id: row.client_id,
-        mpin: row.mpin,
-        totp: row.totp,
-        qty: row.qty,
-        user: row.user,
+      const payload = {
+        user_id: user.id,
+        name: form.name,
+        platform: form.platform,
+        api_key: form.api_key,
+        api_secret: form.api_secret,
+        auth_token: form.auth_token,
+        client_id: form.client_id,
+        mpin: form.mpin,
+        totp: form.totp,
+        notes: form.notes,
+        updated_at: new Date().toISOString(),
       };
 
-      if (row._isNew) {
-        const { error } = await supabase.from('my_keys').insert([payload]);
+      if (editingId === null) {
+        // Insert new broker
+        const { error } = await supabase.from('user_brokers').insert([payload]);
         if (error) throw error;
-        toast.success('Entry added');
+        toast.success('Broker added successfully');
       } else {
+        // Update existing broker
         const { error } = await supabase
-          .from('my_keys')
+          .from('user_brokers')
           .update(payload)
-          .eq('api_key', row._originalApiKey)
-          .eq('user', row.user);
+          .eq('id', editingId)
+          .eq('user_id', user.id);
         if (error) throw error;
-        toast.success('Entry updated');
+        toast.success('Broker updated successfully');
       }
+      setDialogOpen(false);
+      await fetchBrokers();
+    } catch (err: any) {
+      console.error('Save failed:', err);
+      toast.error(err?.message || 'Failed to save broker');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
-      // Refresh or update local state
-      setRows((prev) => {
-        const next = [...prev];
-        next[index] = {
-          ...next[index],
-          _isNew: false,
-          _isSaving: false,
-          _isDirty: false,
-          _originalApiKey: next[index].api_key,
-        };
-        return next;
-      });
-    } catch (error: any) {
-      console.error('Save failed:', error);
-      toast.error(error?.message || 'Save failed');
-      setRows((prev) => {
-        const next = [...prev];
-        next[index] = { ...next[index], _isSaving: false };
-        return next;
-      });
+  const deleteBroker = async (broker: BrokerRow) => {
+    if (!user?.id) return;
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${broker.name}" (${broker.platform})? This action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setIsDeleting(broker.id);
+    try {
+      const { error } = await supabase
+        .from('user_brokers')
+        .delete()
+        .eq('id', broker.id)
+        .eq('user_id', user.id);
+      if (error) throw error;
+      toast.success('Broker deleted successfully');
+      await fetchBrokers();
+    } catch (err: any) {
+      console.error('Delete failed:', err);
+      toast.error(err?.message || 'Failed to delete broker');
+    } finally {
+      setIsDeleting(null);
     }
   };
 
   const handleRestart = async () => {
     setIsRestarting(true);
     try {
-      const env = (import.meta as any).env;
-      // const restartKey = env?.NEXT_PUBLIC_RESTART_KEY || env?.VITE_RESTART_KEY;
-      
-      // if (!restartKey) {
-      //   toast.error('Restart API key not configured');
-      //   return;
-      // }
-
       const response = await fetch("https://be4ny3g67l.execute-api.us-east-1.amazonaws.com/Restart/restartservice", {
         method: "POST",
         headers: {}
@@ -219,7 +227,7 @@ export function MyKeysPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-slate-600">Loading keys...</div>
+        <div className="text-slate-600">Loading brokers...</div>
       </div>
     );
   }
@@ -227,12 +235,14 @@ export function MyKeysPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-      <div>
-          <h1 className="text-slate-900 mb-1">My Keys</h1>
-          <p className="text-slate-600">View, add, and edit your API keys</p>
+        <div>
+          <h1 className="text-slate-900 mb-1">My Brokers</h1>
+          <p className="text-slate-600">View, add, edit, and delete brokers (API key sets)</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={addNewRow} variant="default">Add Entry</Button>
+          <Button onClick={openAddDialog} variant="default">
+            <Plus className="mr-2 h-4 w-4" /> Add Broker
+          </Button>
           <Button onClick={handleRestart} variant="outline" disabled={isRestarting}>
             {isRestarting ? 'Restarting...' : 'Restart'}
           </Button>
@@ -243,140 +253,249 @@ export function MyKeysPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Key className="h-5 w-5" />
-            API Keys
+            Brokers
           </CardTitle>
           <CardDescription>
-            Edit any cell and click Save to persist changes
+            Manage your broker accounts and API credentials. Click Edit to view or modify all fields.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="w-full overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-600">
-                  <th className="p-2">Platform</th>
-                  <th className="p-2">API Key</th>
-                  <th className="p-2">API Secret</th>
-                  <th className="p-2">Auth Token</th>
-                  <th className="p-2">Client ID</th>
-                  <th className="p-2">MPIN</th>
-                  <th className="p-2">TOTP</th>
-                  <th className="p-2">Qty</th>
-                  <th className="p-2 w-28">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.length === 0 ? (
-                  <tr>
-                    <td className="p-2 text-slate-500" colSpan={9}>
-                      No entries yet. Click "Add Entry" to create one.
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((r, idx) => (
-                    <tr key={`${r._originalApiKey}-${idx}`} className="border-t border-slate-200">
-                      <td className="p-2 min-w-[140px]">
-                        <Input
-                          value={r.platform}
-                          onChange={(e) => updateCell(idx, 'platform', e.target.value)}
-                          placeholder="Platform"
-                        />
-                      </td>
-                      <td className="p-2 min-w-[220px]">
-                        <Input
-                          value={r.api_key}
-                          onChange={(e) => updateCell(idx, 'api_key', e.target.value)}
-                          placeholder="API Key"
-                        />
-                      </td>
-                      <td className="p-2 min-w-[220px]">
-              <Input
-                          type="password"
-                          value={r.api_secret ?? ''}
-                          onChange={(e) => updateCell(idx, 'api_secret', e.target.value || null)}
-                          placeholder="API Secret"
-                        />
-                      </td>
-                      <td className="p-2 min-w-[220px]">
-              <Input
-                type="password"
-                          value={r.auth_token ?? ''}
-                          onChange={(e) => updateCell(idx, 'auth_token', e.target.value || null)}
-                          placeholder="Auth Token"
-                        />
-                      </td>
-                      <td className="p-2 min-w-[160px]">
-                        <Input
-                          value={r.client_id ?? ''}
-                          onChange={(e) => updateCell(idx, 'client_id', e.target.value || null)}
-                          placeholder="Client ID"
-                        />
-                      </td>
-                      <td className="p-2 min-w-[140px]">
-              <Input
-                type="password"
-                          value={r.mpin ?? ''}
-                          onChange={(e) => updateCell(idx, 'mpin', e.target.value || null)}
-                          placeholder="MPIN"
-                        />
-                      </td>
-                      <td className="p-2 min-w-[140px]">
-              <Input
-                type="password"
-                          value={r.totp ?? ''}
-                          onChange={(e) => updateCell(idx, 'totp', e.target.value || null)}
-                          placeholder="TOTP"
-                        />
-                      </td>
-                      <td className="p-2 min-w-[100px]">
-                        <Input
-                          type="number"
-                          value={r.qty !== null && r.qty !== undefined ? String(r.qty) : ''}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            const parsed = value === '' ? null : Number(value);
-                            if (parsed === null || Number.isFinite(parsed)) {
-                              updateCell(idx, 'qty', parsed);
-                            }
-                          }}
-                          placeholder="Qty"
-                        />
-                      </td>
-                      <td className="p-2">
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            disabled={r._isSaving || !r._isDirty}
-                            onClick={() => saveRow(idx)}
-                          >
-                            {r._isSaving ? 'Saving...' : 'Save'}
-                          </Button>
-                          <Button 
-                            size="sm"
-                            onClick={handleRestart} 
-                            variant="outline" 
-                            disabled={isRestarting}
-                          >
-                            {isRestarting ? 'Restarting...' : 'Restart'}
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          {brokers.length === 0 ? (
+            <div className="text-center py-8 text-slate-500">
+              No brokers yet. Click "Add Broker" to create one.
             </div>
+          ) : (
+            <div className="space-y-3">
+              {brokers.map((broker) => (
+                <div
+                  key={broker.id}
+                  className="flex items-center justify-between border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex-1">
+                    <div className="font-semibold text-slate-900">{broker.name}</div>
+                    <div className="text-sm text-slate-600 mt-1">
+                      <span className="font-medium">Platform:</span> {broker.platform}
+                      {broker.api_key && (
+                        <span className="ml-4">
+                          <span className="font-medium">API Key:</span>{' '}
+                          <span className="font-mono text-xs">{broker.api_key.slice(0, 8)}...</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 ml-4">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openEditDialog(broker)}
+                    >
+                      <Edit3 className="mr-2 h-4 w-4" /> Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => deleteBroker(broker)}
+                      disabled={isDeleting === broker.id}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" /> 
+                      {isDeleting === broker.id ? 'Deleting...' : 'Delete'}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
       <Card className="border-amber-200 bg-amber-50">
         <CardContent className="pt-6">
           <p className="text-amber-900">
-          Get Auth token from https://kite.zerodha.com/connect/login?api_key="API_KEY"
+            Get Auth token from https://kite.zerodha.com/connect/login?api_key="API_KEY"
           </p>
         </CardContent>
       </Card>
+
+      {/** Dialog - reused for Add and Edit */}
+      <Dialog.Root open={dialogOpen} onOpenChange={(o) => {
+        setDialogOpen(o);
+        if (!o) {
+          // reset editing state when dialog closes
+          setEditingId(null);
+          setForm(null);
+        }
+      }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="DialogOverlay" />
+          <Dialog.Content className="DialogContent">
+            <div className="flex items-center justify-between mb-4">
+              <Dialog.Title className="DialogTitle text-xl font-semibold text-slate-900">
+                {editingId === null ? 'Add Broker' : 'Edit Broker'}
+              </Dialog.Title>
+              <Dialog.Close asChild>
+                <button
+                  className="IconButton rounded-full p-1 hover:bg-slate-100 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5 text-slate-500" />
+                </button>
+              </Dialog.Close>
+            </div>
+            <Dialog.Description className="DialogDescription text-sm text-slate-600 mb-6">
+              {editingId === null 
+                ? 'Enter broker details below. Name, Platform, and API Key are required.' 
+                : 'Edit broker details and click Save to update.'}
+            </Dialog.Description>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex flex-col">
+                  <label htmlFor="broker-name" className="text-sm font-medium text-slate-700 mb-1.5">
+                    Broker Name <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    id="broker-name"
+                    value={form?.name ?? ''}
+                    onChange={(e) => updateForm('name', e.target.value)}
+                    placeholder="e.g. My Zerodha Account"
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="flex flex-col">
+                  <label htmlFor="broker-platform" className="text-sm font-medium text-slate-700 mb-1.5">
+                    Platform <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    id="broker-platform"
+                    value={form?.platform ?? ''}
+                    onChange={(e) => updateForm('platform', e.target.value)}
+                    placeholder="e.g. Zerodha"
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="flex flex-col md:col-span-2">
+                  <label htmlFor="broker-api-key" className="text-sm font-medium text-slate-700 mb-1.5">
+                    API Key <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    id="broker-api-key"
+                    value={form?.api_key ?? ''}
+                    onChange={(e) => updateForm('api_key', e.target.value)}
+                    placeholder="Enter API Key"
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="flex flex-col">
+                  <label htmlFor="broker-api-secret" className="text-sm font-medium text-slate-700 mb-1.5">
+                    API Secret
+                  </label>
+                  <Input
+                    id="broker-api-secret"
+                    type="password"
+                    value={form?.api_secret ?? ''}
+                    onChange={(e) => updateForm('api_secret', e.target.value || null)}
+                    placeholder="Enter API Secret"
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="flex flex-col">
+                  <label htmlFor="broker-auth-token" className="text-sm font-medium text-slate-700 mb-1.5">
+                    Auth Token
+                  </label>
+                  <Input
+                    id="broker-auth-token"
+                    type="password"
+                    value={form?.auth_token ?? ''}
+                    onChange={(e) => updateForm('auth_token', e.target.value || null)}
+                    placeholder="Enter Auth Token"
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="flex flex-col">
+                  <label htmlFor="broker-client-id" className="text-sm font-medium text-slate-700 mb-1.5">
+                    Client ID
+                  </label>
+                  <Input
+                    id="broker-client-id"
+                    value={form?.client_id ?? ''}
+                    onChange={(e) => updateForm('client_id', e.target.value || null)}
+                    placeholder="Enter Client ID"
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="flex flex-col">
+                  <label htmlFor="broker-mpin" className="text-sm font-medium text-slate-700 mb-1.5">
+                    MPIN
+                  </label>
+                  <Input
+                    id="broker-mpin"
+                    type="password"
+                    value={form?.mpin ?? ''}
+                    onChange={(e) => updateForm('mpin', e.target.value || null)}
+                    placeholder="Enter MPIN"
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="flex flex-col">
+                  <label htmlFor="broker-totp" className="text-sm font-medium text-slate-700 mb-1.5">
+                    TOTP
+                  </label>
+                  <Input
+                    id="broker-totp"
+                    type="password"
+                    value={form?.totp ?? ''}
+                    onChange={(e) => updateForm('totp', e.target.value || null)}
+                    placeholder="Enter TOTP"
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="flex flex-col md:col-span-2">
+                  <label htmlFor="broker-notes" className="text-sm font-medium text-slate-700 mb-1.5">
+                    Notes
+                  </label>
+                  <Textarea
+                    id="broker-notes"
+                    value={form?.notes ?? ''}
+                    onChange={(e) => updateForm('notes', e.target.value || null)}
+                    placeholder="Additional notes or information..."
+                    className="w-full min-h-20"
+                    rows={3}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-200">
+              <Dialog.Close asChild>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setDialogOpen(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </Dialog.Close>
+              <Button
+                onClick={async () => {
+                  await saveBroker();
+                }}
+                disabled={isSaving}
+              >
+                {isSaving ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }
