@@ -1,0 +1,486 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Switch } from './ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
+import { useAuth } from './AuthContext';
+import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { toast } from 'sonner';
+import { Briefcase, Edit3, Trash2, X } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+import * as Dialog from "@radix-ui/react-dialog";
+import './global.css';
+
+type Nullable<T> = T | null;
+
+interface UserStrategyRow {
+  id: string;
+  user_id: string;
+  strategy_id: string;
+  broker_id: Nullable<string>;
+  telegram_chat_id: Nullable<string>;
+  qty: Nullable<number>;
+  dry_run: boolean | null;
+  active: boolean | null;
+  config_version: Nullable<number>;
+  task_arn: Nullable<string>;
+  last_task_status: Nullable<string>;
+  last_seen: Nullable<string>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface StrategyCatalogRow {
+  id: string;
+  name: string;
+}
+
+interface BrokerRow {
+  id: string;
+  name: string;
+}
+
+interface TelegramRow {
+  id: string;
+  label: Nullable<string>;
+}
+
+interface UserStrategyDisplay extends UserStrategyRow {
+  strategy_name?: string;
+  broker_name?: Nullable<string>;
+  telegram_label?: Nullable<string>;
+}
+
+interface EditForm {
+  broker_id: Nullable<string>;
+  telegram_chat_id: Nullable<string>;
+  qty: Nullable<number>;
+  dry_run: boolean;
+}
+
+export function PortfolioPage() {
+  const { accessToken, user } = useAuth();
+  const [strategies, setStrategies] = useState<UserStrategyDisplay[]>([]);
+  const [brokers, setBrokers] = useState<BrokerRow[]>([]);
+  const [telegrams, setTelegrams] = useState<TelegramRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
+
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<EditForm | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+
+  const supabase = useMemo(() => {
+    return createClient(
+      `https://${projectId}.supabase.co`,
+      publicAnonKey,
+      {
+        global: accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : undefined,
+      }
+    );
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setIsLoading(false);
+      return;
+    }
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, supabase]);
+
+  const fetchData = async () => {
+    if (!user?.id) return;
+    setIsFetching(true);
+    try {
+      // Fetch user strategies
+      const { data: userStrategies, error: strategiesError } = await supabase
+        .from('user_strategies')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('active', true)
+        .order('created_at', { ascending: false });
+
+      if (strategiesError) throw strategiesError;
+
+      // Fetch brokers
+      const { data: brokersData, error: brokersError } = await supabase
+        .from('user_brokers')
+        .select('id, name')
+        .eq('user_id', user.id)
+        .order('name', { ascending: true });
+
+      if (brokersError) throw brokersError;
+
+      // Fetch telegrams
+      const { data: telegramsData, error: telegramsError } = await supabase
+        .from('user_telegram_chats')
+        .select('id, label')
+        .eq('user_id', user.id)
+        .order('label', { ascending: true, nullsFirst: false });
+
+      if (telegramsError) throw telegramsError;
+
+      // Fetch strategy names
+      const strategyIds = (userStrategies || []).map(s => s.strategy_id);
+      const { data: strategiesData, error: strategiesCatalogError } = await supabase
+        .from('strategy_catalog')
+        .select('id, name')
+        .in('id', strategyIds);
+
+      if (strategiesCatalogError) throw strategiesCatalogError;
+
+      // Combine data
+      const strategiesMap = new Map((strategiesData || []).map(s => [s.id, s.name]));
+      const brokersMap = new Map((brokersData || []).map(b => [b.id, b.name]));
+      const telegramsMap = new Map((telegramsData || []).map(t => [t.id, t.label || 'Unnamed']));
+
+      const enrichedStrategies: UserStrategyDisplay[] = (userStrategies || []).map(strategy => ({
+        ...strategy,
+        strategy_name: strategiesMap.get(strategy.strategy_id) || strategy.strategy_id,
+        broker_name: strategy.broker_id ? brokersMap.get(strategy.broker_id) || null : null,
+        telegram_label: strategy.telegram_chat_id ? telegramsMap.get(strategy.telegram_chat_id) || null : null,
+      }));
+
+      setStrategies(enrichedStrategies);
+      setBrokers(brokersData || []);
+      setTelegrams(telegramsData || []);
+    } catch (error) {
+      console.error('Error fetching portfolio data:', error);
+      toast.error('Failed to load portfolio');
+    } finally {
+      setIsLoading(false);
+      setIsFetching(false);
+    }
+  };
+
+  // Open dialog to edit strategy
+  const openEditDialog = (strategy: UserStrategyDisplay) => {
+    setEditingId(strategy.id);
+    setForm({
+      broker_id: strategy.broker_id,
+      telegram_chat_id: strategy.telegram_chat_id,
+      qty: strategy.qty ?? 1,
+      dry_run: strategy.dry_run ?? true,
+    });
+    setDialogOpen(true);
+  };
+
+  const updateForm = <K extends keyof EditForm>(field: K, value: EditForm[K]) => {
+    setForm((prev) => {
+      if (!prev) return prev;
+      return { ...prev, [field]: value };
+    });
+  };
+
+  const saveStrategy = async () => {
+    if (!form || !user?.id || !editingId) return;
+    setIsSaving(true);
+    try {
+      const payload = {
+        broker_id: form.broker_id || null,
+        telegram_chat_id: form.telegram_chat_id || null,
+        qty: form.qty || null,
+        dry_run: form.dry_run,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from('user_strategies')
+        .update(payload)
+        .eq('id', editingId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      toast.success('Strategy updated successfully');
+      setDialogOpen(false);
+      await fetchData();
+    } catch (err: any) {
+      console.error('Save failed:', err);
+      toast.error(err?.message || 'Failed to update strategy');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const deleteStrategy = async (strategy: UserStrategyDisplay) => {
+    if (!user?.id) return;
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${strategy.strategy_name}"? This action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setIsDeleting(strategy.id);
+    try {
+      const { error } = await supabase
+        .from('user_strategies')
+        .delete()
+        .eq('id', strategy.id)
+        .eq('user_id', user.id);
+      if (error) throw error;
+      toast.success('Strategy deleted successfully');
+      await fetchData();
+    } catch (err: any) {
+      console.error('Delete failed:', err);
+      toast.error(err?.message || 'Failed to delete strategy');
+    } finally {
+      setIsDeleting(null);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-slate-600">Loading portfolio...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-slate-900 mb-1">Portfolio</h1>
+          <p className="text-slate-600">Manage your deployed trading strategies</p>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Briefcase className="h-5 w-5" />
+            Active Strategies
+          </CardTitle>
+          <CardDescription>
+            View and manage your deployed strategies
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {strategies.length === 0 ? (
+            <div className="text-center py-12 text-slate-500">
+              No active strategies deployed yet. Deploy a strategy from the Strategies page to get started.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {strategies.map((strategy) => (
+                <div
+                  key={strategy.id}
+                  className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors"
+                >
+                  {/* First line: Strategy Name (bold) with Edit and Delete buttons right-aligned */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-xl font-bold text-slate-900">
+                      {strategy.strategy_name || 'Unknown'}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openEditDialog(strategy)}
+                      >
+                        <Edit3 className="mr-2 h-4 w-4" /> Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => deleteStrategy(strategy)}
+                        disabled={isDeleting === strategy.id}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" /> 
+                        {isDeleting === strategy.id ? 'Deleting...' : 'Delete'}
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {/* Second line: Broker, Telegram, qty, dry_run, status all inline */}
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-slate-600">Broker:</span>
+                      <span className="text-sm text-slate-900 font-medium">
+                        {strategy.broker_name || <span className="text-slate-400">Not connected</span>}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-slate-600">Telegram:</span>
+                      <span className="text-sm text-slate-900 font-medium">
+                        {strategy.telegram_label || <span className="text-slate-400">Not connected</span>}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-slate-600">Qty:</span>
+                      <span className="text-sm text-slate-900 font-medium">{strategy.qty ?? 1}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-slate-600">Dry Run:</span>
+                      {strategy.dry_run ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                          Enabled
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                          Disabled
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-slate-600">Status:</span>
+                      {strategy.active ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700">
+                          Inactive
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/** Edit Dialog */}
+      <Dialog.Root open={dialogOpen} onOpenChange={(o) => {
+        setDialogOpen(o);
+        if (!o) {
+          setEditingId(null);
+          setForm(null);
+        }
+      }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="DialogOverlay" />
+          <Dialog.Content className="DialogContent">
+            <div className="flex items-center justify-between mb-4">
+              <Dialog.Title className="DialogTitle text-xl font-semibold text-slate-900">
+                Edit Strategy
+              </Dialog.Title>
+              <Dialog.Close asChild>
+                <button
+                  className="IconButton rounded-full p-1 hover:bg-slate-100 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5 text-slate-500" />
+                </button>
+              </Dialog.Close>
+            </div>
+            <Dialog.Description className="DialogDescription text-sm text-slate-600 mb-6">
+              Update strategy configuration below and click Save.
+            </Dialog.Description>
+
+            <div className="space-y-4" style={{ pointerEvents: 'auto' }}>
+              <div className="flex flex-col">
+                <label htmlFor="edit-broker" className="text-sm font-medium text-slate-700 mb-1.5">
+                  Broker
+                </label>
+                <Select
+                  value={form?.broker_id || '__none__'}
+                  onValueChange={(value) => updateForm('broker_id', value === '__none__' ? null : value)}
+                >
+                  <SelectTrigger id="edit-broker" className="w-full">
+                    <SelectValue placeholder="Select a broker" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[10001]" style={{ zIndex: 11000 }}>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {brokers.map((broker) => (
+                      <SelectItem key={broker.id} value={broker.id}>
+                        {broker.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex flex-col">
+                <label htmlFor="edit-telegram" className="text-sm font-medium text-slate-700 mb-1.5">
+                  Telegram
+                </label>
+                <Select
+                  value={form?.telegram_chat_id || '__none__'}
+                  onValueChange={(value) => updateForm('telegram_chat_id', value === '__none__' ? null : value)}
+                >
+                  <SelectTrigger id="edit-telegram" className="w-full">
+                    <SelectValue placeholder="Select a telegram chat" />
+                  </SelectTrigger>
+                  <SelectContent className="z-[10001]" style={{ zIndex: 11000 }}>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {telegrams.map((telegram) => (
+                      <SelectItem key={telegram.id} value={telegram.id}>
+                        {telegram.label || 'Unnamed'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex flex-col">
+                <label htmlFor="edit-qty" className="text-sm font-medium text-slate-700 mb-1.5">
+                  Quantity
+                </label>
+                <Input
+                  id="edit-qty"
+                  type="number"
+                  value={form?.qty ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    const parsed = value === '' ? null : Number(value);
+                    updateForm('qty', parsed);
+                  }}
+                  placeholder="Enter quantity"
+                  className="w-full"
+                  min="1"
+                />
+              </div>
+
+              <div className="flex items-center justify-between" style={{paddingBottom: '10px'}}>
+                <label htmlFor="edit-dry-run" className="text-sm font-medium text-slate-700">
+                  Dry Run
+                </label>
+                <Switch
+                  id="edit-dry-run"
+                  checked={form?.dry_run ?? true}
+                  onCheckedChange={(checked) => updateForm('dry_run', checked)}
+                  style={{ zIndex: 11000 }}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-200" style={{paddingTop: '10px'}}>
+              <Dialog.Close asChild>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setDialogOpen(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </Dialog.Close>
+              <Button
+                onClick={async () => {
+                  await saveStrategy();
+                }}
+                disabled={isSaving}
+              >
+                {isSaving ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </div>
+  );
+}
+

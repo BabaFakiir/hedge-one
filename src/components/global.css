@@ -4,6 +4,7 @@
     background: rgba(0, 0, 0, 0.45);
     z-index: 9999;
     animation: fadeIn 0.2s ease-out;
+    pointer-events: auto;
 }
 
 @keyframes fadeIn {
@@ -30,6 +31,7 @@
     width: 90%;
     max-width: 672px;
     animation: slideIn 0.2s ease-out;
+    pointer-events: auto;
 }
 
 @keyframes slideIn {

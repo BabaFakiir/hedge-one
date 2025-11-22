@@ -10,12 +10,12 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { Button } from './ui/button';
-import { LayoutDashboard, Key, LogOut, Menu, X, MessageSquare, Zap } from 'lucide-react';
+import { LayoutDashboard, Key, LogOut, Menu, X, MessageSquare, Zap, Briefcase } from 'lucide-react';
 
 interface DashboardLayoutProps {
   children: ReactNode;
-  currentPage: 'home' | 'mykeys' | 'telegram' | 'strategies';
-  onNavigate: (page: 'home' | 'mykeys' | 'telegram' | 'strategies') => void;
+  currentPage: 'home' | 'mykeys' | 'telegram' | 'strategies' | 'portfolio';
+  onNavigate: (page: 'home' | 'mykeys' | 'telegram' | 'strategies' | 'portfolio') => void;
 }
 
 export function DashboardLayout({ children, currentPage, onNavigate }: DashboardLayoutProps) {
@@ -24,9 +24,10 @@ export function DashboardLayout({ children, currentPage, onNavigate }: Dashboard
 
   const menuItems = [
     { id: 'home' as const, label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'strategies' as const, label: 'Strategies', icon: Zap },
+    { id: 'portfolio' as const, label: 'Portfolio', icon: Briefcase },
     { id: 'mykeys' as const, label: 'My Brokers', icon: Key },
     { id: 'telegram' as const, label: 'Telegram', icon: MessageSquare },
-    { id: 'strategies' as const, label: 'Strategies', icon: Zap },
   ];
 
   return (
